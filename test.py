@@ -15,8 +15,8 @@ from utils.general import coco80_to_coco91_class, check_dataset, check_file, che
     box_iou, non_max_suppression, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, increment_path, colorstr
 from utils.metrics import ap_per_class, ConfusionMatrix
 from utils.plots import plot_images, output_to_target, plot_study_txt
-from utils.torch_utils import select_device, time_synchronized
-
+from utils.torch_utils import select_device, time_synchronized, prune
+# import torch.nn.utils.prune as prune
 
 def test(data,
          weights=None,
@@ -61,9 +61,51 @@ def test(data,
         #     model = nn.DataParallel(model)
 
     # Half
+    
+    #half = False
     half = device.type != 'cpu'  # half precision only supported on CUDA
     if half:
         model.half()
+    
+
+
+    prune(model, amount=0)
+
+    # Prune
+    
+    # parameter_to_prune = [
+    # (v, "weight") 
+    # for k, v in dict(model.named_modules()).items()
+    # if ((len(list(v.children())) == 0) and (k.endswith('conv')))
+    # ]
+
+    # # now you can use global_unstructured pruning
+    # prune.global_unstructured(parameter_to_prune, pruning_method=prune.L1Unstructured, amount=0.2)
+
+    # # global sparsity
+    # nparams = 0
+    # pruned = 0
+    # for k, v in dict(model.named_modules()).items():
+    #     if ((len(list(v.children())) == 0) and (k.endswith('conv'))):
+    #         nparams += v.weight.nelement()
+    #         pruned += torch.sum(v.weight == 0)
+    # print('Global sparsity across the pruned layers: {:.2f}%'.format( 100. * pruned / float(nparams)))
+    # ^^ should be 30%
+
+    # local sparsity
+    '''
+    for k, v in dict(model.named_modules()).items():
+        if ((len(list(v.children())) == 0) and (k.endswith('conv'))):
+            print(
+                "Sparsity in {}: {:.2f}%".format(
+                    k,
+                    100. * float(torch.sum(v.weight == 0))
+                    / float(v.weight.nelement())
+                )
+            )
+    # ^^ will be different for each layer
+    '''
+    
 
     # Configure
     model.eval()

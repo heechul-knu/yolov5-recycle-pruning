@@ -61,9 +61,152 @@ class Detect(nn.Module):
         return torch.stack((xv, yv), 2).view((1, 1, ny, nx, 2)).float()
 
 
+def create_modules(blocks):
+    net_info = blocks[0]
+    module_list = nn.ModuleList()
+    prev_filters = 3
+    output_filters = []
+    for index, x in enumerate(blocks[1:]):
+        module = nn.Sequential()
+        # check the type of block
+        # create a new module for the block
+        # append to module_list
+        if (x["type"] == "convolutional"):
+        # Get the info about the layer
+            activation = x["activation"]
+            filters = int(x["filters"])
+            padding = int(x["pad"])
+            kernel_size = int(x["size"])
+            stride = int(x["stride"])
+            try:
+                batch_normalize = int(x["batch_normalize"])
+                bias = False
+            except:
+                batch_normalize = 0
+                bias = True
+
+            if padding:
+                pad = (kernel_size - 1) // 2
+            else:
+                pad = 0
+
+            if batch_normalize:
+                conv = nn.Conv2d(prev_filters, filters, kernel_size, stride, pad, bias=bias)
+                module.add_module("conv_with_bn_{0}".format(index), conv)
+                bn = nn.BatchNorm2d(filters)
+                module.add_module("batch_norm_{0}".format(index), bn)
+            else:
+                conv = nn.Conv2d(prev_filters, filters, kernel_size, stride, pad, bias=bias)
+                module.add_module("conv_without_bn_{0}".format(index), conv)
+
+            # Check the activation.
+            # It is either Linear or a Leaky ReLU for YOLO
+            if activation == "leaky":
+                activn = nn.LeakyReLU(0.1, inplace=True)
+                module.add_module("leaky_{0}".format(index), activn)
+
+            # If it's an upsampling layer
+            # We use Bilinear2dUpsampling
+        elif (x["type"] == "upsample"):
+            stride = int(x["stride"])
+            upsample = nn.Upsample(scale_factor=2, mode="nearest")
+            module.add_module("upsample_{}".format(index), upsample)
+            # If it is a route layer
+        elif (x["type"] == "route"):
+            x["layers"] = x["layers"].split(',')
+            # Start of a route
+            start = int(x["layers"][0])
+            # end, if there exists one.
+            try:
+                end = int(x["layers"][1])
+            except:
+                end = 0
+            # Positive anotation
+            if start > 0:
+                start = start - index
+            if end > 0:
+                end = end - index
+            route = Route([start,end])
+            module.add_module("route_{0}".format(index), route)
+            if end < 0:
+                filters = output_filters[index + start] + output_filters[index + end]
+            else:
+                filters = output_filters[index + start]
+
+            # shortcut corresponds to skip connection
+        elif x["type"] == "shortcut":
+            froms = int(x['from'])
+            shortcut = shortcutLayer(froms)
+            module.add_module("shortcut_{}".format(index), shortcut)
+            # Yolo is the detection layer
+        elif x["type"] == "yolo" or x["type"] == "region":
+            try:
+                mask = x["mask"].split(",")
+                mask = [int(x) for x in mask]
+                anchors = x["anchors"].split(",")
+                anchors = [int(a) for a in anchors]
+            except:
+                mask = [int(x) for x in range(int(x['num']))]
+                anchors = x["anchors"].split(",")
+                anchors = [32*float(a) for a in anchors]
+            anchors = [(anchors[i], anchors[i + 1]) for i in range(0, len(anchors), 2)]
+            anchors = [anchors[i] for i in mask]
+            num_classes = int(x["classes"])
+            img_height = int(net_info["height"])
+            try:
+                ignore_thresh = float(x["ignore_thresh"])
+            except:
+                ignore_thresh = float(x["thresh"])
+            detection = DetectionLayer(anchors,num_classes,img_height,ignore_thresh)
+            module.add_module("Detection_{}".format(index), detection)
+
+        elif x["type"] == "maxpool":
+            kernel_size = int(x["size"])
+            stride = int(x["stride"])
+            pool = nn.MaxPool2d(stride=stride,kernel_size=kernel_size)
+            module.add_module("maxpool_{0}".format(index), pool)
+
+        elif x["type"] == "reorg":
+            stride = int(x["stride"])
+            reorg = Reorg(stride=stride)
+            module.add_module("reorg_{0}".format(index),reorg)
+            filters = filters*4
+
+        module_list.append(module)
+        prev_filters = filters
+        output_filters.append(filters)
+
+
+    return (net_info, module_list)
+
+'''
+def parse_cfg(cfgfile):
+    file = open(cfgfile, 'r')
+    lines = file.read().split('\n')  # store the lines in a list
+    lines = [x for x in lines if len(x) > 0]  # get read of the empty lines
+    lines = [x for x in lines if x[0] != '#']  # get rid of comments
+    lines = [x.rstrip().lstrip() for x in lines]  # get rid of fringe whitespaces
+    block ={}
+    blocks =[]
+    for line in lines:
+        if line[0] == '[':
+            if len(block)!= 0:
+                blocks.append(block)
+                block ={}
+            block['type'] = line[1:-1].rstrip()
+        else:
+            key,value = line.split('=')
+            block[key.rstrip()] = value.lstrip()
+    blocks.append(block)
+    return blocks
+'''
+
 class Model(nn.Module):
-    def __init__(self, cfg='yolov5s.yaml', ch=3, nc=None, anchors=None):  # model, input channels, number of classes
+    def __init__(self, cfg='yolov5s.yaml', ch=3, nc=None, anchors=None, channel=None):  # model, input channels, number of classes
         super(Model, self).__init__()
+        # self.blocks = parse_cfg(cfg)
+        # self.net_info, self.module_list = create_modules(self.blocks)
+
         if isinstance(cfg, dict):
             self.yaml = cfg  # model dict
         else:  # is *.yaml
@@ -80,7 +223,7 @@ class Model(nn.Module):
         if anchors:
             logger.info(f'Overriding model.yaml anchors with anchors={anchors}')
             self.yaml['anchors'] = round(anchors)  # override yaml value
-        self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch])  # model, savelist
+        self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch], channel=channel)  # model, savelist
         self.names = [str(i) for i in range(self.yaml['nc'])]  # default names
         # print([x.shape for x in self.forward(torch.zeros(1, ch, 64, 64))])
 
@@ -195,13 +338,42 @@ class Model(nn.Module):
     def info(self, verbose=False, img_size=640):  # print model information
         model_info(self, verbose, img_size)
 
+    # 윤주 추가 - slimming
+    def save_weights(self,path,cutoff=-1):
+        """save layers between 0 and cutoff (cutoff = -1 -> all are saved)"""
+        fp = open(path,'wb')
+        self.header_info[3]=self.seen
+        self.header_info.tofile(fp)
+        for i in range(len(self.module_list[:cutoff])):
+            module_type = self.blocks[i + 1]["type"]
+            # If module_type is convolutional load weights
+            # Otherwise ignore.
+            if module_type == "convolutional":
+                model = self.module_list[i]
+                try:
+                    batch_normalize = int(self.blocks[i + 1]["batch_normalize"])
+                except:
+                    batch_normalize = 0
+                conv = model[0]
+                if (batch_normalize):
+                    bn = model[1]
+                    bn.bias.data.cpu().numpy().tofile(fp)
+                    bn.weight.data.cpu().numpy().tofile(fp)
+                    bn.running_mean.data.cpu().numpy().tofile(fp)
+                    bn.running_var.data.cpu().numpy().tofile(fp)
+                else:
+                    conv.bias.data.cpu().numpy().tofile(fp)
+                conv.weight.data.cpu().numpy().tofile(fp)
+        fp.close()
 
-def parse_model(d, ch):  # model_dict, input_channels(3)
+
+def parse_model(d, ch, channel):  # model_dict, input_channels(3)
     logger.info('\n%3s%18s%3s%10s  %-40s%-30s' % ('', 'from', 'n', 'params', 'module', 'arguments'))
     anchors, nc, gd, gw = d['anchors'], d['nc'], d['depth_multiple'], d['width_multiple']
     na = (len(anchors[0]) // 2) if isinstance(anchors, list) else anchors  # number of anchors
     no = na * (nc + 5)  # number of outputs = anchors * (classes + 5)
 
+    num = 0
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):  # from, number, module, args
         m = eval(m) if isinstance(m, str) else m  # eval strings
@@ -215,6 +387,10 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
         if m in [Conv, GhostConv, Bottleneck, GhostBottleneck, SPP, DWConv, MixConv2d, Focus, CrossConv, BottleneckCSP,
                  C3]:
             c1, c2 = ch[f], args[0]
+            #print(c1)
+            if isinstance(channel, list):
+                c1, c2 = ch[f], channel[num]
+                num += 1
             if c2 != no:  # if not output
                 c2 = make_divisible(c2 * gw, 8)
 
@@ -237,6 +413,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
         else:
             c2 = ch[f]
 
+        #print(args)
         m_ = nn.Sequential(*[m(*args) for _ in range(n)]) if n > 1 else m(*args)  # module
         t = str(m)[8:-2].replace('__main__.', '')  # module type
         np = sum([x.numel() for x in m_.parameters()])  # number params
