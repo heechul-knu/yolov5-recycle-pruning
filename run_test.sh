@@ -8,4 +8,5 @@
 
 
 #0430
-CUDA_VISIBLE_DEVICES=0,1 python test.py --weights weights/yolov5_0430.pt --data dataset.yaml --img 1280
+#CUDA_VISIBLE_DEVICES=0,1 python test.py --weights weights/yolov5_0430.pt --data dataset.yaml --img 1280
+CUDA_VISIBLE_DEVICES=0 python3 test.py --data dataset.yaml --weights /home/ohyoonju/yolov5-slimming/runs/Iterative_Pruning/exp10/weights/last.pt

@@ -69,7 +69,7 @@ def test(data,
     
 
 
-    prune(model, amount=0)
+    #prune(model, amount=0)
 
     # Prune
     
