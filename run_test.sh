@@ -1,1 +1,0 @@
-CUDA_VISIBLE_DEVICES=0 python3 test.py --data recycle_type1.yaml --weights ./runs/Iterative_Pruning/exp10/weights/last.pt #--augment
