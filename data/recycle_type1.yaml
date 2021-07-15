@@ -1,0 +1,9 @@
+base : '/home/ohyoonju/yolov5-recycle-pruning/dataset/yolo/images/'
+
+train: ['3rd', '4th', 'num', 'newpaperpack', 'newpet', 'pet_glass', '5th', '20201122', '20201203', '20201205', 'extra', 'joo_eun', 'newmix']
+val: ['kvl']
+test: ['test']
+
+nc: 7
+
+names: ['c_1', 'c_2', 'c_3', 'c_4', 'c_5', 'c_6', 'c_7']
