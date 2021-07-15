@@ -1,1 +1,0 @@
-CUDA_VISIBLE_DEVICES=0,1 python3 IterativePruning.py --weights weights/yolov5_0430.pt --data recycle_type1.yaml --img 1280 --batch-size 16 #--crop_aug
