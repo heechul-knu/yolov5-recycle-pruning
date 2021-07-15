@@ -11,7 +11,3 @@ __pycache__/
 .lh/
 .vscode/
 .ipynb_checkpoints/
-
-#shell
-run_IterativePruning.sh
-run_test.sh
