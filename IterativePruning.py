@@ -150,7 +150,8 @@ def train(hyp, opt, device, tb_writer=None):
     for k,m in enumerate(model.modules()):
         if isinstance(m, nn.BatchNorm2d):
             if k not in donntprune:
-                m.weight.grad.data.add_(s*torch.sign(m.weight.data))
+                #m.weight.grad.data.add_(s*torch.sign(m.weight.data))
+                m.weight.data.mul_(m.weight.grad.data).abs()
 
     # Resume
     start_epoch, best_fitness = 0, 0.0
