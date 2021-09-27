@@ -1,0 +1,17 @@
+# log
+runs/
+wandb/
+
+# cp & file
+*.pt
+dataset/
+
+# temp
+__pycache__/
+.lh/
+.vscode/
+.ipynb_checkpoints/
+
+#shell
+run_IterativePruning.sh
+run_test.sh
