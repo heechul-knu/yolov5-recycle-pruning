@@ -146,6 +146,12 @@ def train(hyp, opt, device, tb_writer=None):
     # EMA
     ema = ModelEMA(model) if rank in [-1, 0] else None
 
+    def updateBN(model,s,donntprune):
+    for k,m in enumerate(model.modules()):
+        if isinstance(m, nn.BatchNorm2d):
+            if k not in donntprune:
+                m.weight.grad.data.add_(s*torch.sign(m.weight.data))
+
     # Resume
     start_epoch, best_fitness = 0, 0.0
     if pretrained:
