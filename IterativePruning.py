@@ -146,6 +146,25 @@ def train(hyp, opt, device, tb_writer=None):
     # EMA
     ema = ModelEMA(model) if rank in [-1, 0] else None
 
+    total = 0
+    for k,m in enumerate(model.modules()):
+         #print(m)
+         if isinstance(m, nn.BatchNorm2d):
+             #print('bn')
+#             print(m.weight)
+             if k not in donntprune:
+                total += m.weight.data.shape[0]
+    bn = torch.zeros(total)
+    index = 0
+    percent = 0.1
+    for k,m in enumerate(model.modules()):
+        if isinstance(m, nn.BatchNorm2d):
+            if k not in donntprune:
+                size = m.weight.data.shape[0]
+                bn[index:(index+size)] = m.weight.data.abs().clone()
+                index += size
+    y, i = torch.sort(bn)
+
     # Resume
     start_epoch, best_fitness = 0, 0.0
     if pretrained:
