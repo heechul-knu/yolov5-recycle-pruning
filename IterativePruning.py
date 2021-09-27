@@ -239,19 +239,20 @@ def train(hyp, opt, device, tb_writer=None):
     model.class_weights = labels_to_class_weights(dataset.labels, nc).to(device) * nc  # attach class weights
     model.names = names
 
+   # pruning step
     compress_rate = 0
     print('compress rate : ', compress_rate)
     num = 0
     while True:
         if num == 0:
-            prune_rate = 0.3
+            prune_rate = 0.3 # 첫 프루닝 비율 in 반복 프루닝
             num += 1
         else:
-            prune_rate = 0.05
+            prune_rate = 0.05 # compression rate가 0.4 이상이 될 때까지의 프루닝 비율
             num += 1
         print('#', num)
-        prune(model, amount=prune_rate)
-        compress_rate = compress_rate + (1-compress_rate)*prune_rate
+        prune(model, amount=prune_rate) # 프루닝 적용
+        compress_rate = compress_rate + (1-compress_rate)*prune_rate # compression rate 계산
         print('prune rate :', prune_rate, 'compress rate :', compress_rate)
 
         # Start training
@@ -481,7 +482,7 @@ def train(hyp, opt, device, tb_writer=None):
             dist.destroy_process_group()
         torch.cuda.empty_cache()
 
-        if compress_rate > 0.4:
+        if compress_rate > 0.4: # compression rate가 0.4이상이되면 반복 프루닝을 멈춘다
             break
         
     return results
@@ -493,7 +494,7 @@ if __name__ == '__main__':
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
     parser.add_argument('--data', type=str, default='data/coco128.yaml', help='data.yaml path')
     parser.add_argument('--hyp', type=str, default='data/hyp.scratch.yaml', help='hyperparameters path')
-    parser.add_argument('--epochs', type=int, default=10) #300
+    parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs')
     parser.add_argument('--img-size', nargs='+', type=int, default=[640, 640], help='[train, test] image sizes')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
